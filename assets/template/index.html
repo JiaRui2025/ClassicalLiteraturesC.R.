@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<!--
+  scanned-thesis-web · 参考实现（1 章 3 图，可直接双击打开）
+
+  引擎（照用，别重写）
+    · data-lang 双语切换        · .ch-head / .settles / .plates 渲染
+    · 图版卡 + 灯箱 + 跨章翻页   · 「岩芯」章节导航 + 阅读进度条
+
+  内容槽（换书时必须整段重写）
+    · <header class="hero">     标题、副题、meta-grid
+    · <section id="problem">    核心问题与命题
+    · <footer>                  关于本页 / 术语对照
+  结论区 #verdict 已数据驱动（THESIS.verdict），无数据时自动隐藏。
+-->
+<html lang="zh-CN" data-lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>石材的病理学 · Causas y Mecanismos de Alteración · Granada &amp; Jaén 1994</title>
+<style>
+:root{
+  --paper:#f3f0e9; --paper-2:#faf8f3; --paper-3:#e9e4d9;
+  --ink:#191714; --ink-2:#403a33; --muted:#7d756a; --faint:#a89e90;
+  --rule:#d9d2c3; --rule-2:#c4baa7;
+  --terra:#a8482a; --patina:#3f5f52; --gold:#8a6a2f;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,"Songti SC","Source Han Serif SC",serif;
+  --sans:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:var(--sans); font-size:16px; line-height:1.75;
+  -webkit-font-smoothing:antialiased;
+  background-image:
+    radial-gradient(circle at 20% 10%, rgba(168,72,42,.035), transparent 45%),
+    radial-gradient(circle at 85% 70%, rgba(63,95,82,.045), transparent 50%);
+  background-attachment:fixed;
+}
+::selection{background:rgba(168,72,42,.18)}
+img{max-width:100%; display:block}
+
+/* ---------- language ---------- */
+[data-lang="zh"] .en{display:none !important}
+[data-lang="en"] .zh{display:none !important}
+
+/* ---------- top bar ---------- */
+.topbar{
+  position:fixed; top:0; left:0; right:0; z-index:60;
+  display:flex; align-items:center; gap:18px;
+  padding:10px 22px;
+  background:rgba(243,240,233,.86);
+  backdrop-filter:blur(10px) saturate(1.1);
+  border-bottom:1px solid var(--rule);
+  font-size:12px;
+}
+.topbar .brand{
+  font-family:var(--mono); letter-spacing:.14em; text-transform:uppercase;
+  color:var(--ink-2); white-space:nowrap;
+}
+.topbar .brand b{color:var(--terra); font-weight:600}
+.topbar .spacer{flex:1}
+.langsw{display:flex; border:1px solid var(--rule-2); border-radius:2px; overflow:hidden}
+.langsw button{
+  font-family:var(--mono); font-size:11px; letter-spacing:.1em;
+  padding:5px 11px; background:transparent; border:0; cursor:pointer; color:var(--muted);
+}
+.langsw button.on{background:var(--ink); color:var(--paper-2)}
+.langsw button+button{border-left:1px solid var(--rule-2)}
+.progress{position:fixed; top:0; left:0; height:2px; background:var(--terra); z-index:70; width:0}
+
+/* ---------- hero ---------- */
+.hero{
+  min-height:100vh; display:flex; flex-direction:column; justify-content:center;
+  padding:120px 6vw 60px; position:relative; overflow:hidden;
+}
+.hero::before{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background-image:repeating-linear-gradient(
+    to bottom, transparent 0 38px, rgba(120,105,85,.10) 38px 39px);
+  mask-image:linear-gradient(to bottom, transparent, #000 18%, #000 72%, transparent);
+}
+.hero::after{
+  content:""; position:absolute; right:-8vw; top:14vh; width:44vw; height:44vw;
+  border:1px solid var(--rule-2); border-radius:50%; opacity:.5; pointer-events:none;
+}
+.hero-inner{position:relative; max-width:1180px; margin:0 auto; width:100%}
+.kicker{
+  font-family:var(--mono); font-size:11px; letter-spacing:.26em; text-transform:uppercase;
+  color:var(--terra); margin-bottom:28px; display:flex; gap:14px; align-items:center;
+}
+.kicker::after{content:""; flex:1; height:1px; background:var(--rule-2); max-width:180px}
+.hero h1{
+  font-family:var(--serif); font-weight:400; margin:0;
+  font-size:clamp(38px,6.2vw,84px); line-height:1.02; letter-spacing:-.015em;
+}
+.hero h1 .zh-line{display:block; font-size:.62em; line-height:1.25; margin-top:.28em; letter-spacing:.02em}
+.hero h1 .en-line{display:block; font-family:var(--serif); font-style:italic; font-size:.34em; line-height:1.4; color:var(--muted); margin-top:.5em; letter-spacing:0}
+.es-title{
+  font-family:var(--serif); font-style:italic; font-size:15px; color:var(--muted);
+  max-width:640px; margin:34px 0 0; line-height:1.6; border-left:2px solid var(--terra); padding-left:16px;
+}
+.meta-grid{
+  display:grid; grid-template-columns:repeat(3,1fr);
+  gap:1px; background:var(--rule); border:1px solid var(--rule);
+  margin-top:54px; max-width:900px;
+}
+.meta-grid div{background:var(--paper); padding:14px 16px}
+.meta-grid dt{font-family:var(--mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 5px}
+.meta-grid dd{margin:0; font-size:13.5px; line-height:1.45; color:var(--ink-2)}
+.scrollcue{
+  position:absolute; bottom:34px; left:6vw; font-family:var(--mono); font-size:10px;
+  letter-spacing:.2em; text-transform:uppercase; color:var(--faint);
+  display:flex; align-items:center; gap:10px;
+}
+.scrollcue span{display:block; width:44px; height:1px; background:var(--rule-2); position:relative; overflow:hidden}
+.scrollcue span::after{content:""; position:absolute; inset:0; background:var(--terra); transform:translateX(-100%); animation:slide 2.4s infinite}
+@keyframes slide{0%{transform:translateX(-100%)}55%{transform:translateX(0)}100%{transform:translateX(100%)}}
+
+/* ---------- generic section ---------- */
+section{position:relative; scroll-margin-top:58px}
+.wrap{max-width:1180px; margin:0 auto; padding:0 6vw}
+.sec-head{
+  display:flex; align-items:baseline; gap:18px; border-top:1px solid var(--rule-2);
+  padding-top:14px; margin-bottom:44px;
+}
+.sec-head .num{font-family:var(--mono); font-size:11px; letter-spacing:.2em; color:var(--terra)}
+.sec-head h2{font-family:var(--serif); font-weight:400; font-size:clamp(24px,3vw,36px); margin:0; letter-spacing:-.01em}
+.sec-head .sub{font-family:var(--mono); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin-left:auto}
+
+/* ---------- problem ---------- */
+.problem{padding:110px 0 90px}
+.q{
+  font-family:var(--serif); font-size:clamp(24px,3.4vw,42px); line-height:1.32;
+  margin:0 0 40px; max-width:920px; letter-spacing:-.01em;
+}
+.q em{font-style:italic; color:var(--terra)}
+.lede{font-size:17px; line-height:1.9; max-width:760px; color:var(--ink-2)}
+.lede p{margin:0 0 1.1em}
+.pillars{display:grid; grid-template-columns:1fr 1fr; gap:0; margin:56px 0 0; border-top:1px solid var(--rule)}
+.pillar{padding:26px 28px 30px 0; border-bottom:1px solid var(--rule)}
+.pillar+.pillar{padding-left:28px; border-left:1px solid var(--rule)}
+.pillar h4{margin:0 0 10px; font-family:var(--serif); font-size:22px; font-weight:400}
+.pillar h4 small{font-family:var(--mono); font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--faint); display:block; margin-top:4px}
+.pillar p{margin:0; font-size:14.5px; color:var(--ink-2); line-height:1.8}
+.claim{
+  margin:56px 0 0; padding:30px 34px; background:var(--paper-2);
+  border:1px solid var(--rule); border-left:3px solid var(--patina);
+  font-family:var(--serif); font-size:19px; line-height:1.75; color:var(--ink);
+}
+.claim b{color:var(--patina); font-weight:400; border-bottom:1px solid rgba(63,95,82,.3)}
+
+/* ---------- framework / core ---------- */
+.framework{padding:90px 0 110px; background:#ebe6da; border-top:1px solid var(--rule-2); border-bottom:1px solid var(--rule-2)}
+.fw-grid{display:grid; grid-template-columns:230px 1fr; gap:64px; align-items:start}
+.core{position:sticky; top:70px}
+.core-title{font-family:var(--mono); font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--faint); margin-bottom:14px}
+.core-bar{display:flex; flex-direction:column; border:1px solid var(--rule-2); background:var(--paper-2)}
+.core-band{
+  position:relative; display:flex; align-items:center; gap:8px;
+  padding:0 9px; cursor:pointer; border-bottom:1px solid rgba(196,186,167,.55);
+  transition:background .25s, color .25s; overflow:hidden;
+}
+.core-band:last-child{border-bottom:0}
+.core-band .rn{font-family:var(--mono); font-size:9.5px; letter-spacing:.06em; color:var(--muted); flex:0 0 auto}
+.core-band .tt{font-size:11px; line-height:1.2; color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.core-band::before{content:""; position:absolute; left:0; top:0; bottom:0; width:2px; background:transparent; transition:background .25s}
+.core-band:hover{background:rgba(168,72,42,.06)}
+.core-band.active{background:rgba(168,72,42,.09)}
+.core-band.active::before{background:var(--terra)}
+.core-band.active .tt{color:var(--ink)}
+.core-note{margin-top:12px; font-family:var(--mono); font-size:9.5px; letter-spacing:.05em; color:var(--faint); line-height:1.6}
+
+.obj-list{counter-reset:o; margin:0; padding:0; list-style:none}
+.obj-list li{
+  counter-increment:o; position:relative; padding:0 0 18px 52px;
+  border-bottom:1px solid var(--rule); margin-bottom:18px; font-size:15px; line-height:1.8; color:var(--ink-2);
+}
+.obj-list li:last-child{border-bottom:0}
+.obj-list li::before{
+  content:counter(o,decimal-leading-zero); position:absolute; left:0; top:2px;
+  font-family:var(--mono); font-size:11px; color:var(--terra); letter-spacing:.08em;
+}
+.obj-list li::after{
+  content:""; position:absolute; left:26px; top:8px; width:14px; height:1px; background:var(--rule-2);
+}
+
+/* ---------- chapter ---------- */
+.chapter{padding:96px 0 40px; border-top:1px solid var(--rule-2)}
+.ch-head{display:grid; grid-template-columns:120px 1fr; gap:34px; align-items:start; margin-bottom:34px}
+.ch-roman{
+  font-family:var(--serif); font-size:clamp(48px,7vw,88px); line-height:.86; color:var(--terra);
+  letter-spacing:-.03em; opacity:.9;
+}
+.ch-titles h3{margin:0; font-family:var(--serif); font-weight:400; font-size:clamp(23px,2.9vw,34px); line-height:1.24; letter-spacing:-.01em}
+.ch-titles .en-t{font-family:var(--serif); font-style:italic; font-size:16px; color:var(--muted); margin-top:8px}
+.ch-titles .es-t{font-family:var(--serif); font-size:13px; color:var(--faint); margin-top:10px; line-height:1.5}
+.ch-meta{display:flex; gap:16px; flex-wrap:wrap; margin-top:14px; font-family:var(--mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--faint)}
+.ch-meta b{color:var(--patina); font-weight:500}
+
+.settles{
+  display:grid; grid-template-columns:120px 1fr; gap:34px; margin:0 0 40px;
+}
+.settles .lbl{font-family:var(--mono); font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--terra); padding-top:6px}
+.settles p{margin:0; font-family:var(--serif); font-size:19px; line-height:1.7; color:var(--ink); border-left:1px solid var(--rule-2); padding-left:24px}
+
+.ch-body{display:grid; grid-template-columns:120px 1fr; gap:34px}
+.ch-body .col{max-width:760px}
+.ch-body p{margin:0 0 1.15em; font-size:15.5px; line-height:1.95; color:var(--ink-2)}
+.ch-body p:first-child::first-letter{
+  font-family:var(--serif); font-size:2.9em; float:left; line-height:.82; padding:6px 10px 0 0; color:var(--terra);
+}
+.ch-body p:first-child.zh::first-letter{font-size:1em; float:none; padding:0; color:inherit}
+
+/* ---------- plates ---------- */
+.plates{
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr));
+  gap:34px 26px; margin:52px 0 20px;
+}
+.plate{
+  background:var(--paper-2); border:1px solid var(--rule);
+  display:flex; flex-direction:column; position:relative;
+  transition:box-shadow .3s, transform .3s, border-color .3s;
+}
+.plate:hover{box-shadow:0 10px 30px -14px rgba(60,45,30,.35); border-color:var(--rule-2); transform:translateY(-2px)}
+.plate .frame{
+  position:relative; padding:14px; background:#fff; border-bottom:1px solid var(--rule);
+  cursor:zoom-in; overflow:hidden; flex:0 0 auto; display:flex; align-items:center; justify-content:center;
+  height:290px;
+}
+.plate .frame img{
+  width:100%; height:auto; max-height:340px; object-fit:contain;
+  filter:contrast(1.02); transition:transform .6s cubic-bezier(.2,.7,.3,1);
+}
+.plate:hover .frame img{transform:scale(1.025)}
+.plate .stamp{
+  position:absolute; top:8px; left:8px; z-index:2;
+  font-family:var(--mono); font-size:9.5px; letter-spacing:.1em;
+  background:var(--paper-2); border:1px solid var(--rule-2); color:var(--ink-2);
+  padding:2px 6px;
+}
+.plate .cap{padding:14px 16px 18px; flex:1}
+.plate .cap-es{
+  font-family:var(--serif); font-style:italic; font-size:12.5px; line-height:1.55;
+  color:var(--muted); margin:0 0 10px; padding-bottom:10px; border-bottom:1px dotted var(--rule-2);
+}
+.plate .cap-t{font-size:14px; font-weight:600; margin:0 0 7px; line-height:1.45; color:var(--ink)}
+.plate .cap-d{font-size:13.5px; line-height:1.8; color:var(--ink-2); margin:0}
+.plate .cap-d.en{font-family:var(--serif); font-size:13.5px; line-height:1.62; color:var(--ink-2)}
+
+/* ---------- scheme ---------- */
+.scheme{margin:46px 0 10px; border:1px solid var(--rule); background:var(--paper-2); padding:28px}
+.scheme svg{width:100%; height:auto; display:block}
+.scheme .cap-s{font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); margin-top:16px}
+
+/* ---------- verdict ---------- */
+.verdict{padding:100px 0 90px; background:var(--ink); color:var(--paper); margin-top:80px}
+.verdict .sec-head{border-top-color:rgba(255,255,255,.18)}
+.verdict .sec-head h2{color:var(--paper-2)}
+.verdict .sec-head .num{color:#d98a63}
+.verdict .sec-head .sub{color:rgba(243,240,233,.45)}
+.verdict-lede{max-width:700px; font-size:15.5px; line-height:1.9; color:rgba(243,240,233,.75); margin:0 0 52px}
+.mat-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:1px; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.14)}
+.mat{background:#1d1b18; padding:24px 22px 26px}
+.mat .mt{font-family:var(--serif); font-size:19px; margin:0 0 4px; color:var(--paper-2)}
+.mat .ms{font-family:var(--mono); font-size:9.5px; letter-spacing:.14em; text-transform:uppercase; color:#d98a63; margin:0 0 14px}
+.mat .mrow{display:flex; justify-content:space-between; font-size:12.5px; color:rgba(243,240,233,.7); padding:5px 0; border-bottom:1px dotted rgba(255,255,255,.12)}
+.mat .mrow b{color:var(--paper); font-weight:500}
+.bar{height:4px; background:rgba(255,255,255,.14); margin-top:16px; position:relative}
+.bar i{position:absolute; left:0; top:0; bottom:0; background:#d98a63}
+.rank{margin-top:56px}
+.rank h4{font-family:var(--mono); font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:rgba(243,240,233,.5); font-weight:400; margin:0 0 18px}
+.rank ol{list-style:none; counter-reset:r; margin:0; padding:0}
+.rank li{
+  counter-increment:r; display:grid; grid-template-columns:26px 1fr 200px; gap:16px; align-items:center;
+  padding:12px 0; border-bottom:1px solid rgba(255,255,255,.1); font-size:14px;
+}
+.rank li::before{content:counter(r); font-family:var(--mono); font-size:11px; color:#d98a63}
+.rank .rb{height:3px; background:rgba(255,255,255,.14)}
+.rank .rb i{display:block; height:100%; background:#d98a63}
+
+/* ---------- footer ---------- */
+footer{padding:70px 0 80px; border-top:1px solid var(--rule); background:var(--paper)}
+.foot-grid{display:grid; grid-template-columns:1.4fr 1fr; gap:60px; font-size:13px; color:var(--muted); line-height:1.8}
+.foot-grid h5{font-family:var(--mono); font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--faint); margin:0 0 12px; font-weight:400}
+.foot-grid p{margin:0 0 10px}
+.foot-grid a{color:var(--ink-2); text-decoration:none; border-bottom:1px solid var(--rule-2)}
+
+/* ---------- lightbox ---------- */
+.lb{
+  position:fixed; inset:0; z-index:200; background:rgba(18,16,14,.94);
+  display:none; align-items:center; justify-content:center; padding:5vh 4vw;
+}
+.lb.on{display:flex}
+.lb figure{margin:0; max-width:min(1100px,92vw); max-height:90vh; display:flex; flex-direction:column; gap:14px}
+.lb img{max-height:74vh; width:auto; object-fit:contain; margin:0 auto; background:#fff; padding:10px}
+.lb figcaption{color:#e8e2d6; font-family:var(--serif); font-style:italic; font-size:13.5px; line-height:1.6; text-align:center; max-width:820px; margin:0 auto}
+.lb .lbid{font-family:var(--mono); font-size:10px; letter-spacing:.16em; color:#d98a63; text-align:center; font-style:normal}
+.lb .nav{position:absolute; top:50%; transform:translateY(-50%); background:none; border:1px solid rgba(255,255,255,.3); color:#fff; width:44px; height:44px; cursor:pointer; font-size:16px}
+.lb .prev{left:2vw} .lb .next{right:2vw}
+.lb .close{position:absolute; top:2vh; right:2vw; background:none; border:0; color:#fff; font-size:28px; cursor:pointer; line-height:1}
+
+/* ---------- reveal ---------- */
+.rv{opacity:0; transform:translateY(18px); transition:opacity .8s ease, transform .8s cubic-bezier(.2,.7,.3,1)}
+.rv.in{opacity:1; transform:none}
+
+@media (max-width:900px){
+  .fw-grid{grid-template-columns:1fr; gap:34px}
+  .core{position:static}
+  .ch-head,.settles,.ch-body{grid-template-columns:1fr; gap:14px}
+  .ch-roman{font-size:52px}
+  .settles p{border-left:0; padding-left:0}
+  .pillars{grid-template-columns:1fr}
+  .pillar+.pillar{padding-left:0; border-left:0}
+  .foot-grid{grid-template-columns:1fr; gap:30px}
+  .topbar .brand{font-size:10px}
+}
+</style>
+</head>
+<body>
+
+<div class="progress" id="prog"></div>
+
+<div class="topbar">
+  <div class="brand">Causas <b>·</b> Mecanismos <b>·</b> Alteración <span style="opacity:.45">/ 1994</span></div>
+  <div class="spacer"></div>
+  <div class="langsw">
+    <button data-set="zh" class="on">中文</button>
+    <button data-set="en">EN</button>
+  </div>
+</div>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div class="kicker"><span class="zh">博士论文精读 · 格拉纳达大学 1994</span><span class="en">Doctoral thesis · Universidad de Granada 1994</span></div>
+    <h1>
+      <span class="zh-line zh">石材的病理学</span>
+      <span class="zh-line en">The Pathology of Stone</span>
+      <span class="en-line"><span class="zh">格拉纳达与哈恩大教堂钙质石材的劣化成因与机制</span><span class="en">Causes and mechanisms of decay in the calcareous materials of two Andalusian cathedrals</span></span>
+    </h1>
+    <p class="es-title">Causas y Mecanismos de Alteración de los Materiales Calcáreos de las Catedrales de Granada y Jaén</p>
+    <div class="meta-grid">
+      <div><dt>Author</dt><dd>Carlos Rodríguez-Navarro</dd></div>
+      <div><dt>Year</dt><dd>1994</dd></div>
+      <div><dt>Institution</dt><dd><span class="zh">格拉纳达大学 矿物学与岩石学系</span><span class="en">Univ. of Granada, Dept. of Mineralogy &amp; Petrology</span></dd></div>
+      <div><dt>Directors</dt><dd>E. Sebastián Pardo · U. Zezza</dd></div>
+      <div><dt>Extent</dt><dd>476 pp. · 11 chapters</dd></div>
+      <div><dt>Plates here</dt><dd>80 figures re-read</dd></div>
+    </div>
+  </div>
+  <div class="scrollcue"><span></span><span class="zh">向下滚动</span><span class="en">Scroll</span></div>
+</header>
+
+<!-- ================= PROBLEM ================= -->
+<section class="problem" id="problem">
+  <div class="wrap">
+    <div class="sec-head rv">
+      <div class="num">00</div>
+      <h2><span class="zh">这篇论文解决了什么</span><span class="en">What this thesis settles</span></h2>
+      <div class="sub">The question</div>
+    </div>
+
+    <p class="q rv"><span class="zh">为什么同一面墙上，相邻的两块石头，<em>一块已化成砂，另一块却几乎完好？</em></span><span class="en">Why, on the same wall, does one block <em>crumble to sand while its neighbour stays intact?</em></span></p>
+
+    <div class="lede rv">
+      <p><span class="zh">1994 年，Carlos Rodríguez-Navarro 以格拉纳达与哈恩两座大教堂为对象，把「石材劣化」从一份描述性的病害清单，推进为一套可测量、可排序、可预测的成因—机制模型。论文的答案并不浪漫：石头不是被时间打败的，而是被孔隙里的水、盐和酸，按各自的孔隙结构，以不同的速率拆解的。</span>
+      <span class="en">In 1994 Carlos Rodríguez-Navarro took two Andalusian cathedrals and moved stone decay from a descriptive inventory of damage to a measurable, rankable and predictive model of cause and mechanism. The answer is not romantic: stone is not defeated by time but dismantled — at different rates, according to its own pore structure — by water, salt and acid inside its pores.</span></p>
+    </div>
+
+    <div class="pillars">
+      <div class="pillar rv">
+        <h4><span class="zh">内因</span><span class="en">Intrinsic</span><small>alterability · 易损性</small></h4>
+        <p><span class="zh">矿物组成、结构、孔隙系统、胶结程度、层理各向异性。它们不施加荷载，但决定石材对荷载的响应速度——即「易损性」。</span>
+        <span class="en">Mineralogy, texture, pore system, degree of cementation, lamination anisotropy. These apply no load; they set the rate of response to load — alterability.</span></p>
+      </div>
+      <div class="pillar rv">
+        <h4><span class="zh">外因</span><span class="en">Extrinsic</span><small>loading · 荷载</small></h4>
+        <p><span class="zh">降水与干湿循环、冻融、盐溶液供给、SO₂ 与颗粒物污染、热应力、结构失稳。它们决定荷载的强度与节律，却不决定石材是否承受得住。</span>
+        <span class="en">Rain and wet–dry cycles, frost, salt supply, SO₂ and particulate pollution, thermal stress, structural instability. These set the magnitude and rhythm of the load, not whether the stone can bear it.</span></p>
+      </div>
+    </div>
+
+    <div class="claim rv">
+      <span class="zh">核心命题：<b>劣化形态是机制的宏观指纹，而机制由孔隙系统控制。</b>因此，只要能定量刻画孔隙结构与水分行为，就能解释、排序并预测不同石材在同一环境中的不同命运。</span>
+      <span class="en">The central claim: <b>macroscopic decay forms are the fingerprint of mechanisms, and mechanisms are governed by the pore system.</b> Quantify pore structure and water behaviour, and you can explain, rank and predict why different stones meet different fates in one environment.</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= FRAMEWORK ================= -->
+<section class="framework" id="framework">
+  <div class="wrap">
+    <div class="sec-head rv">
+      <div class="num">01</div>
+      <h2><span class="zh">框架：一份 476 页的岩芯</span><span class="en">Framework: a 476-page core sample</span></h2>
+      <div class="sub">Structure</div>
+    </div>
+
+    <div class="fw-grid">
+      <div class="core rv">
+        <div class="core-title"><span class="zh">按篇幅比例排列</span><span class="en">Scaled by page count</span></div>
+        <div class="core-bar" id="corebar"></div>
+        <div class="core-note"><span class="zh">条带厚度 ∝ 章节页数。点击跳转。</span><span class="en">Band thickness ∝ chapter length. Click to jump.</span></div>
+      </div>
+      <div>
+        <p class="lede rv" style="margin-bottom:34px">
+          <span class="zh">七项目标构成一条完整的证据链：从「用什么石头」（1）与「环境如何」（2），到「石头是什么」（3）与「为什么坏」（4），再到「能撑多久」（5）与「怎么坏的」（6），最后落到「怎么办」（7）。前两章设定问题与方法，第三至十章是证据，第十一章收束。</span>
+          <span class="en">Seven objectives form one chain of evidence: which stone (1) and which environment (2); what the stone is (3) and why it fails (4); how long it lasts (5) and how exactly it fails (6); and finally what to do (7). Chapters I–II set the problem and method, III–X supply the evidence, XI closes.</span>
+        </p>
+        <ol class="obj-list rv" id="objlist"></ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div id="chapters"></div>
+
+<!-- ================= VERDICT ================= -->
+<section class="verdict" id="verdict">
+  <div class="wrap">
+    <div class="sec-head rv">
+      <div class="num">11</div>
+      <h2><span class="zh">答案：四种石材，四条命运</span><span class="en">The answer: four stones, four fates</span></h2>
+      <div class="sub">Conclusion</div>
+    </div>
+    <p class="verdict-lede rv">
+      <span class="zh">结论并不落在「哪种石头好」，而落在一组可传递的判断上：耐久性不由孔隙率单调决定，而由胶结程度、黏土类型与层理各向异性三者共同决定；同一岩性内部，砌筑方向可以逆转命运；而保护处理若只追求防护效率、不报告色差与孔径改变的代价，就可能把劣化从表面推向内部。</span>
+      <span class="en">The conclusion is not which stone is good, but a set of transferable judgements: durability is not monotonic in porosity but jointly set by cementation, clay type and lamination anisotropy; within one lithology, laying direction can reverse the outcome; and a treatment that reports efficiency without reporting colour shift and pore-size change may push decay from the surface inward.</span>
+    </p>
+
+    <div class="mat-grid" id="matgrid"></div>
+
+    <div class="rank rv">
+      <h4><span class="zh">耐久性排序 · 盐结晶 + SO₂ 双重考验</span><span class="en">Durability ranking · salt + SO₂</span></h4>
+      <ol id="ranklist"></ol>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot-grid">
+    <div>
+      <h5><span class="zh">关于这份读物</span><span class="en">About this reading</span></h5>
+      <p><span class="zh">本页依据 Carlos Rodríguez-Navarro 1994 年提交格拉纳达大学的地质学博士论文原件（476 页，扫描本）编写。全部 80 幅图版均自原书页面裁切，保留原始西班牙语图注；中文与英文说明依据原文相应章节撰写，术语首次出现时以「中文（English）」并列，并保留西班牙语原词。</span>
+      <span class="en">Built from the original 476-page scanned doctoral thesis submitted to the University of Granada in 1994. All 80 plates are cropped from the original pages and keep their Spanish captions; the Chinese and English notes are written from the corresponding chapters, with Spanish terms retained where they carry technical weight.</span></p>
+    </div>
+    <div>
+      <h5><span class="zh">术语对照</span><span class="en">Terminology</span></h5>
+      <p><span class="zh">calcarenita 钙质砂岩／生物碎屑灰岩 · caliza micrítica 泥晶灰岩 · dolomía 白云岩 · costra negra 黑壳 · arenización 砂化 · desplacado 板状剥落 · alveolización 蜂窝状风化 · yeso 石膏</span>
+      <span class="en">calcarenita · caliza micrítica · dolomía · costra negra · arenización · desplacado · alveolización · yeso</span></p>
+    </div>
+  </div>
+</footer>
+
+<div class="lb" id="lb">
+  <button class="close" id="lbclose">×</button>
+  <button class="nav prev" id="lbprev">‹</button>
+  <button class="nav next" id="lbnext">›</button>
+  <figure>
+    <img id="lbimg" src="" alt="">
+    <figcaption><div class="lbid" id="lbid"></div><div id="lbcap"></div></figcaption>
+  </figure>
+</div>
+
+<script src="data/meta.js"></script>
+<script src="data/ch-demo.js"></script>
+<script>
+(function(){
+  const T = window.THESIS;
+  const PAGES = {I:20, II:10, III:52, IV:16, V:44, VI:26, VII:100, VIII:32, IX:46, X:32, XI:12};
+  const LANG = () => document.documentElement.dataset.lang;
+
+  /* ---------- objectives ---------- */
+  const ol = document.getElementById('objlist');
+  T.objectives.forEach(o=>{
+    const li=document.createElement('li');
+    li.innerHTML = `<span class="zh">${o[0]}</span><span class="en">${o[1]}</span>`;
+    ol.appendChild(li);
+  });
+
+  /* ---------- core bar ---------- */
+  const bar = document.getElementById('corebar');
+  const total = Object.values(PAGES).reduce((a,b)=>a+b,0);
+  T.chapters.forEach(ch=>{
+    const b=document.createElement('div');
+    b.className='core-band';
+    b.dataset.target='ch-'+ch.r;
+    b.style.height = Math.max(18, (PAGES[ch.r]/total)*430) + 'px';
+    b.innerHTML = `<span class="rn">${ch.r}</span><span class="tt"><span class="zh">${ch.zh}</span><span class="en">${ch.en}</span></span>`;
+    b.addEventListener('click',()=>document.getElementById('ch-'+ch.r).scrollIntoView({behavior:'smooth',block:'start'}));
+    bar.appendChild(b);
+  });
+
+  /* ---------- chapters ---------- */
+  const host = document.getElementById('chapters');
+  const allFigs = [];
+
+  T.chapters.forEach((ch, ci)=>{
+    const sec = document.createElement('section');
+    sec.className='chapter'; sec.id='ch-'+ch.r;
+
+    const bodyZh = ch.body_zh.map(p=>`<p class="zh">${p}</p>`).join('');
+    const bodyEn = ch.body_en.map(p=>`<p class="en">${p}</p>`).join('');
+
+    let schemeHTML='';
+    if(ch.scheme){
+      const n=ch.scheme.nodes;
+      const w=1000, h=210, gap=w/n.length;
+      let svg=`<svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">`;
+      n.forEach((nd,i)=>{
+        const x=i*gap+gap*0.08, bw=gap*0.84, y=56, bh=92;
+        const col = i===0?'#3f5f52':(i===4?'#a8482a':'#403a33');
+        svg+=`<rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="none" stroke="${col}" stroke-width="1.2"/>`;
+        svg+=`<text x="${x+bw/2}" y="${y+30}" text-anchor="middle" font-family="Georgia,serif" font-size="16" fill="${col}">${nd[0]}</text>`;
+        svg+=`<text x="${x+bw/2}" y="${y+52}" text-anchor="middle" font-family="PingFang SC,sans-serif" font-size="11.5" fill="#7d756a">${nd[1]}</text>`;
+        if(i<n.length-1){
+          const ax=x+bw+4, ay=y+bh/2, bx=x+gap+gap*0.08-4;
+          svg+=`<line x1="${ax}" y1="${ay}" x2="${bx-6}" y2="${ay}" stroke="#c4baa7" stroke-width="1"/>`;
+          svg+=`<path d="M${bx-6},${ay} l-6,-3 l0,6 z" fill="#c4baa7"/>`;
+        }
+      });
+      svg+=`</svg>`;
+      schemeHTML=`<div class="scheme rv">${svg}<div class="cap-s"><span class="zh">${ch.scheme.zh}</span><span class="en">${ch.scheme.en}</span></div></div>`;
+    }
+
+    let platesHTML='';
+    if(ch.figs && ch.figs.length){
+      platesHTML = '<div class="plates">' + ch.figs.map(f=>{
+        const idx = allFigs.length;
+        allFigs.push({...f, ch: ch.r});
+        return `<figure class="plate rv" data-i="${idx}">
+          <div class="frame" data-i="${idx}">
+            <span class="stamp">${f.id}</span>
+            <img src="assets/fig/${f.id}.jpg" alt="${f.id}" loading="lazy">
+          </div>
+          <div class="cap">
+            <p class="cap-es">${f.cap}</p>
+            <p class="cap-t"><span class="zh">${f.t_zh}</span><span class="en">${f.t_en}</span></p>
+            <p class="cap-d zh">${f.d_zh}</p>
+            <p class="cap-d en">${f.d_en}</p>
+          </div>
+        </figure>`;
+      }).join('') + '</div>';
+    }
+
+    sec.innerHTML = `
+      <div class="wrap">
+        <div class="ch-head rv">
+          <div class="ch-roman">${ch.r}</div>
+          <div class="ch-titles">
+            <h3><span class="zh">${ch.zh}</span><span class="en">${ch.en}</span></h3>
+            <div class="es-t">${ch.es}</div>
+            <div class="ch-meta">
+              <span>${ch.pages}</span>
+              ${ch.figs.length ? `<span>FIG. ${String(ch.figs.length).padStart(2,'0')}</span>` : `<span><span class="zh">无图版</span><span class="en">NO PLATES</span></span>`}
+              <span><b><span class="zh">${ch.tag_zh}</span><span class="en">${ch.tag_en}</span></b></span>
+            </div>
+          </div>
+        </div>
+        <div class="settles rv">
+          <div class="lbl"><span class="zh">本章解决</span><span class="en">Settles</span></div>
+          <p><span class="zh">${ch.solved_zh}</span><span class="en">${ch.solved_en}</span></p>
+        </div>
+        <div class="ch-body rv">
+          <div class="lbl"></div>
+          <div class="col">${bodyZh}${bodyEn}</div>
+        </div>
+        ${schemeHTML}
+        ${platesHTML}
+      </div>`;
+    host.appendChild(sec);
+  });
+
+  /* ---------- verdict ---------- */
+  const V = T.verdict || {};
+  const MATS = V.materials || [];
+  if(V.title_zh){
+    document.querySelector('#verdict .sec-head h2').innerHTML =
+      `<span class="zh">${V.title_zh}</span><span class="en">${V.title_en||V.title_zh}</span>`;
+  }
+  if(V.lede_zh){
+    document.querySelector('#verdict .verdict-lede').innerHTML =
+      `<span class="zh">${V.lede_zh}</span><span class="en">${V.lede_en||''}</span>`;
+  }
+  const mg = document.getElementById('matgrid');
+  MATS.forEach(m=>{
+    const d=document.createElement('div');
+    d.className='mat rv';
+    d.innerHTML = `<p class="mt"><span class="zh">${m.t_zh}</span><span class="en">${m.t_en}</span></p>
+      <p class="ms">${m.s}</p>
+      <div class="mrow"><span><span class="zh">主导机制</span><span class="en">Mechanism</span></span></div>
+      <div class="mrow" style="border:0;display:block;padding-top:0"><b style="font-weight:400;font-size:12.5px"><span class="zh">${m.mech_zh}</span><span class="en">${m.mech_en}</span></b></div>
+      <div class="mrow"><span><span class="zh">孔隙率</span><span class="en">Porosity</span></span><b>${m.por}</b></div>
+      <div class="mrow"><span><span class="zh">典型病害</span><span class="en">Signature decay</span></span></div>
+      <div class="mrow" style="border:0;display:block;padding-top:0"><b style="font-weight:400;font-size:12.5px"><span class="zh">${m.note_zh}</span><span class="en">${m.note_en}</span></b></div>
+      <div class="bar"><i style="width:${m.dur}%"></i></div>`;
+    mg.appendChild(d);
+  });
+
+  const RANK = V.ranking || [];
+  if(!MATS.length && !RANK.length) document.getElementById('verdict').style.display='none';
+  const rl=document.getElementById('ranklist');
+  RANK.forEach(([n,v])=>{
+    const li=document.createElement('li');
+    li.innerHTML=`<span>${n}</span><span class="rb"><i style="width:${v}%"></i></span>`;
+    rl.appendChild(li);
+  });
+
+  /* ---------- language ---------- */
+  document.querySelectorAll('.langsw button').forEach(b=>{
+    b.addEventListener('click',()=>{
+      document.documentElement.dataset.lang = b.dataset.set;
+      document.querySelectorAll('.langsw button').forEach(x=>x.classList.toggle('on', x===b));
+      document.documentElement.lang = b.dataset.set==='zh' ? 'zh-CN' : 'en';
+    });
+  });
+
+  /* ---------- lightbox ---------- */
+  const lb=document.getElementById('lb'), lbimg=document.getElementById('lbimg'),
+        lbcap=document.getElementById('lbcap'), lbid=document.getElementById('lbid');
+  let cur=0;
+  function show(i){
+    cur=(i+allFigs.length)%allFigs.length;
+    const f=allFigs[cur];
+    lbimg.src=`assets/fig/${f.id}.jpg`;
+    lbid.textContent=`${f.ch} · ${f.id}`;
+    lbcap.innerHTML=`<span class="zh">${f.cap}</span><span class="en">${f.cap}</span>`;
+    lb.classList.add('on');
+  }
+  document.addEventListener('click',e=>{
+    const fr=e.target.closest('.frame');
+    if(fr){ show(+fr.dataset.i); }
+  });
+  document.getElementById('lbclose').addEventListener('click',()=>lb.classList.remove('on'));
+  document.getElementById('lbprev').addEventListener('click',()=>show(cur-1));
+  document.getElementById('lbnext').addEventListener('click',()=>show(cur+1));
+  lb.addEventListener('click',e=>{ if(e.target===lb) lb.classList.remove('on'); });
+  document.addEventListener('keydown',e=>{
+    if(!lb.classList.contains('on')) return;
+    if(e.key==='Escape') lb.classList.remove('on');
+    if(e.key==='ArrowLeft') show(cur-1);
+    if(e.key==='ArrowRight') show(cur+1);
+  });
+
+  /* ---------- scroll ---------- */
+  const prog=document.getElementById('prog');
+  const bands=[...document.querySelectorAll('.core-band')];
+  function onScroll(){
+    const h=document.documentElement.scrollHeight-innerHeight;
+    prog.style.width=(scrollY/Math.max(1,h)*100)+'%';
+    let active=null;
+    document.querySelectorAll('.chapter').forEach(s=>{
+      const r=s.getBoundingClientRect();
+      if(r.top<innerHeight*0.45) active=s.id.replace('ch-','');
+    });
+    bands.forEach(b=>b.classList.toggle('active', b.dataset.target==='ch-'+active));
+  }
+  addEventListener('scroll',onScroll,{passive:true}); onScroll();
+
+  /* dev: deep-link scroll  #y=2400 */
+  if(location.hash.startsWith('#y=')){ const y=+location.hash.slice(3); document.documentElement.style.scrollBehavior='auto'; addEventListener('load',()=>{document.documentElement.scrollTop=y; document.body.scrollTop=y;}); }
+
+  /* ---------- reveal ---------- */
+  const io=new IntersectionObserver(es=>{
+    es.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });
+  },{rootMargin:'0px 0px -8% 0px', threshold:.08});
+  document.querySelectorAll('.rv').forEach((el,i)=>{
+    el.style.transitionDelay=(Math.min(i%6,5)*40)+'ms';
+    io.observe(el);
+  });
+})();
+</script>
+</body>
+</html>
